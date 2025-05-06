@@ -15,15 +15,26 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"time"
+
+	"github.com/sierrasoftworks/humane-errors-go"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	bladeapiv1alpha1 "github.com/uptime-industries/compute-blade-agent/api/bladeapi/v1alpha1"
+	"github.com/uptime-industries/compute-blade-agent/cmd/bladectl/config"
+	"github.com/uptime-industries/compute-blade-agent/pkg/log"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
-	grpcAddr string
-	timeout  time.Duration
+	bladeName string
+	timeout   time.Duration
 )
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&grpcAddr, "addr", "unix:///tmp/compute-blade-agent.sock", "address of the compute-blade-agent gRPC server")
+	rootCmd.PersistentFlags().StringVar(&bladeName, "blade", "", "Name of the compute-blade to control. If not provided, the compute-blade specified in `current-blade` will be used.")
 	rootCmd.PersistentFlags().DurationVar(&timeout, "timeout", time.Minute, "timeout for gRPC requests")
 }
 
@@ -32,6 +43,31 @@ var rootCmd = &cobra.Command{
 	Short: "bladectl interacts with the compute-blade-agent and allows you to manage hardware-features of your compute blade(s)",
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		origCtx := cmd.Context()
+
+		// Load potential file configs
+		if err := viper.ReadInConfig(); err != nil {
+			return err
+		}
+
+		// load configuration
+		var bladectlCfg config.BladectlConfig
+		if err := viper.Unmarshal(&bladectlCfg); err != nil {
+			return err
+		}
+
+		var blade *config.Blade
+
+		if len(bladeName) > 0 {
+			var herr humane.Error
+			if blade, herr = bladectlCfg.FindBlade(bladeName); herr != nil {
+				return fmt.Errorf(herr.Display())
+			}
+		}
+
+		blade, herr := bladectlCfg.FindBlade(bladeName)
+		if herr != nil {
+			return fmt.Errorf(herr.Display())
+		}
 
 		// setup signal handlers for SIGINT and SIGTERM
 		ctx, cancelCtx := context.WithTimeout(origCtx, timeout)

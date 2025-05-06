@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"strings"
 
+	"github.com/spf13/viper"
 	bladeapiv1alpha1 "github.com/uptime-industries/compute-blade-agent/api/bladeapi/v1alpha1"
 )
 
@@ -32,6 +34,13 @@ func clientFromContext(ctx context.Context) bladeapiv1alpha1.BladeAgentServiceCl
 }
 
 func main() {
+	// Setup configuration
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath("$HOME/.config/bladectl")
+
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}

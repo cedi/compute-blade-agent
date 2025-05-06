@@ -4,18 +4,23 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
+	"path/filepath"
 
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/sierrasoftworks/humane-errors-go"
 	bladeapiv1alpha1 "github.com/uptime-industries/compute-blade-agent/api/bladeapi/v1alpha1"
+	"github.com/uptime-industries/compute-blade-agent/cmd/bladectl/config"
 	agent2 "github.com/uptime-industries/compute-blade-agent/pkg/agent"
 	"github.com/uptime-industries/compute-blade-agent/pkg/events"
 	"github.com/uptime-industries/compute-blade-agent/pkg/log"
+	"github.com/uptime-industries/compute-blade-agent/pkg/util"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"gopkg.in/yaml.v2"
 )
 
 type ListenMode string
@@ -53,7 +58,7 @@ type AgentGrpcService struct {
 }
 
 // NewGrpcApiServer creates a new gRPC service
-func NewGrpcApiServer(_ context.Context, options ...GrpcApiServiceOption) *AgentGrpcService {
+func NewGrpcApiServer(ctx context.Context, options ...GrpcApiServiceOption) *AgentGrpcService {
 	service := &AgentGrpcService{}
 
 	for _, option := range options {
@@ -61,6 +66,14 @@ func NewGrpcApiServer(_ context.Context, options ...GrpcApiServiceOption) *Agent
 	}
 
 	grpcOpts := make([]grpc.ServerOption, 0)
+
+	// Make sure we have a local bladectl config with no authentication enabled
+	if err := EnsureUnauthenticatedBladectlConfig(ctx, service.listenAddr, service.listenMode); err != nil {
+		log.FromContext(ctx).Fatal("failed to ensure proper local bladectl config",
+			zap.Error(err),
+			zap.Strings("advice", err.Advice()),
+		)
+	}
 
 	// Add Logging Middleware
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(grpczap.UnaryServerInterceptor(log.InterceptorLogger(zap.L()))))
@@ -71,6 +84,44 @@ func NewGrpcApiServer(_ context.Context, options ...GrpcApiServiceOption) *Agent
 	bladeapiv1alpha1.RegisterBladeAgentServiceServer(service.server, service)
 
 	return service
+}
+
+func EnsureUnauthenticatedBladectlConfig(ctx context.Context, serverAddr string, _ ListenMode) humane.Error {
+	configDir, herr := config.EnsureBladectlConfigHome()
+	if herr != nil {
+		return herr
+	}
+
+	configPath := filepath.Join(configDir, "config.yaml")
+	if util.FileExists(configPath) {
+		return nil
+	}
+
+	// Generate localhost keys
+	log.FromContext(ctx).Debug("Generating new local bladectl config...")
+
+	bladectlConfig := config.NewBladectlConfig(serverAddr)
+	data, err := yaml.Marshal(&bladectlConfig)
+	if err != nil {
+		return humane.Wrap(err, "Failed to marshal YAML config",
+			"this should never happen",
+			"please report this as a bug to https://github.com/uptime-industries/compute-blade-agent/issues",
+		)
+	}
+
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
+		return humane.Wrap(err, "Failed to write bladectl config file",
+			"ensure the home-directory is writable by the agent user",
+		)
+	}
+
+	log.FromContext(ctx).Info("Generated new local bladectl config",
+		zap.String("path", configPath),
+		zap.String("server", serverAddr),
+		zap.Bool("authenticated", false),
+	)
+
+	return nil
 }
 
 // ServeAsync starts the gRPC server asynchronously in a new goroutine and cancels the context if an error occurs.
