@@ -90,3 +90,44 @@ BLADE_LISTEN_METRICS=":1234"
 | `BLADE_FAN_SPEED_PERCENT=80`                      | Set static fan speed                     |
 | `BLADE_CRITICAL_TEMPERATURE_THRESHOLD=60`         | Set critical temp threshold (°C)         |
 | `BLADE_HAL_RPM_REPORTING_STANDARD_FAN_UNIT=false` | Disable RPM monitoring for lower CPU use |
+
+## Exposing the gRPC API for Remote Access
+
+To allow secure remote use of `bladectl` over the network:
+
+### 1. Update your config (`/etc/compute-blade-agent/config.yaml`):
+
+```yaml
+listen:
+  metrics: ":9666"
+  grpc: ":8081"
+  authenticated: true
+  mode: tcp
+```
+
+### 2. Restart the agent:
+
+```bash
+systemctl restart compute-blade-agent
+```
+
+This will:
+
+- Generate new mTLS server and client certificates in `/etc/compute-blade-agent/*.pem`
+- Write a new bladectl config to: `~/.config/bladectl/config.yaml` with the client certificates in place
+
+## Using `bladectl` from your local machine
+
+1. Copy the config from the blade:
+
+```bash
+scp root@blade-pi1:~/.config/bladectl/config.yaml ~/.config/bladectl/config.yaml
+```
+
+2. Fix the server address to point to the blade:
+
+```bash
+yq e '.blades[] | select(.name == "blade-pi1") .blade.server = "blade-pi1.local:8081"' -i ~/.config/bladectl/config.yaml
+```
+
+Your `bladectl` tool can now securely talk to the remote agent via gRPC over mTLS.
