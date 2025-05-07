@@ -10,15 +10,6 @@ import (
 
 	"github.com/sierrasoftworks/humane-errors-go"
 	"github.com/spf13/cobra"
-	bladeapiv1alpha1 "github.com/uptime-industries/compute-blade-agent/api/bladeapi/v1alpha1"
-	"github.com/uptime-industries/compute-blade-agent/pkg/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"time"
-
-	"github.com/sierrasoftworks/humane-errors-go"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	bladeapiv1alpha1 "github.com/uptime-industries/compute-blade-agent/api/bladeapi/v1alpha1"
 	"github.com/uptime-industries/compute-blade-agent/cmd/bladectl/config"
@@ -53,15 +44,6 @@ var rootCmd = &cobra.Command{
 		var bladectlCfg config.BladectlConfig
 		if err := viper.Unmarshal(&bladectlCfg); err != nil {
 			return err
-		}
-
-		var blade *config.Blade
-
-		if len(bladeName) > 0 {
-			var herr humane.Error
-			if blade, herr = bladectlCfg.FindBlade(bladeName); herr != nil {
-				return fmt.Errorf(herr.Display())
-			}
 		}
 
 		blade, herr := bladectlCfg.FindBlade(bladeName)
@@ -99,7 +81,7 @@ var rootCmd = &cobra.Command{
 
 		// Create our gRPC Transport Credentials
 		credentials := insecure.NewCredentials()
-		conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(credentials))
+		conn, err := grpc.NewClient(blade.Server, grpc.WithTransportCredentials(credentials))
 		if err != nil {
 			return fmt.Errorf(
 				humane.Wrap(err,
