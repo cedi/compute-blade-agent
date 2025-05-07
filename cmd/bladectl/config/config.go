@@ -19,7 +19,14 @@ type NamedBlade struct {
 }
 
 type Blade struct {
-	Server string `yaml:"server" mapstructure:"server"`
+	Server      string      `yaml:"server" mapstructure:"server"`
+	Certificate Certificate `yaml:"cert,omitempty" mapstructure:"cert,omitempty"`
+}
+
+type Certificate struct {
+	CertificateAuthorityData string `yaml:"certificate-authority-data,omitempty" mapstructure:"certificate-authority-data,omitempty"`
+	ClientCertificateData    string `yaml:"client-certificate-data,omitempty" mapstructure:"client-certificate-data,omitempty"`
+	ClientKeyData            string `yaml:"client-key-data,omitempty" mapstructure:"client-key-data,omitempty"`
 }
 
 func (c *BladectlConfig) FindBlade(name string) (*Blade, humane.Error) {
