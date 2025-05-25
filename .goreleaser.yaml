@@ -20,7 +20,6 @@ builds:
     ldflags: &ldflags
       - -X=main.Version={{.Version}}
       - -X=main.Commit={{.Commit}}
-      - -X=main.Date={{ .CommitTimestamp }}
 
   - id: bladectl
     env: *env
